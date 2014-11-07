@@ -8,6 +8,7 @@ import distutils.spawn
 import getpass
 import logging
 import os
+import ssl
 import sys
 
 from .server import env
@@ -84,7 +85,20 @@ def run_gunicorn():
         else:
             logger.warn('You asked we drop priviledges, but we are not root!')
 
-    args += env.source('GUNICORN_OPTS')
+    gunicorn_opts = env.source('GUNICORN_OPTS')
+    if not gunicorn_opts and env.source('REGISTRY_TLS_VERIFY'):
+        gunicorn_opts = ['--ssl-version', ssl.PROTOCOL_TLSv1]
+        for k, v in {
+            '--certfile': '/ssl/registry.cert',
+            '--keyfile': '/ssl/registry.key',
+            '--ca-certs': '/ssl/ca.crt'
+        }.iteritems():
+            if not os.path.isfile(v):
+                print("could not find %s" % (v))
+                sys.exit(1)
+            gunicorn_opts.append(k, v)
+
+    args += gunicorn_opts
     args.append('docker_registry.wsgi:application')
     # Stringify all args and call
     os.execl(*[str(v) for v in args])
